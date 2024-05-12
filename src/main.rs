@@ -36,9 +36,20 @@ struct TransOptions {
     sink_schema: Option<String>,
 }
 
+#[derive(Parser, Debug)]
+#[command(version, about)]
+struct GenOptions {
+    /// output file path.
+    #[arg(long, default_value_t = {"example.yaml".to_string()})]
+    output: String,
+}
+
 #[derive(Subcommand)]
 enum Subcommands {
+    /// transfer data from source to sink.
     Trans(TransOptions),
+    /// generate example config file.
+    GenExample(GenOptions),
 }
 
 #[derive(Parser)]
@@ -108,5 +119,15 @@ fn main() {
     let cli = Cli::parse();
     match cli.command {
         Subcommands::Trans(args) => exec_trans(args),
+        Subcommands::GenExample(args) => {
+            let example = Config::example();
+            let f = std::fs::OpenOptions::new()
+                .write(true)
+                .create(true)
+                .truncate(true)
+                .open(args.output)
+                .expect("cannot open file");
+            serde_yaml::to_writer(f, &example).unwrap();
+        }
     };
 }

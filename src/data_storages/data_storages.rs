@@ -33,8 +33,9 @@ pub enum SchemaTypeWithValue {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SchemaField {
     pub name: String,
+    #[serde(rename(serialize = "type", deserialize = "type"))]
     pub type_: SchemaType,
-    pub extra_: HashMap<String, String>,
+    pub extra: HashMap<String, String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

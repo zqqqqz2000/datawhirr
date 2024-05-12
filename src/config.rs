@@ -17,7 +17,7 @@ pub struct Config {
 }
 
 impl Config {
-    fn example() -> Config {
+    pub fn example() -> Config {
         Config {
             data_storages: HashMap::from([(
                 "example_storage1".to_string(),
@@ -31,7 +31,7 @@ impl Config {
                 Schema(vec![SchemaField {
                     name: "field1".to_string(),
                     type_: SchemaType::String,
-                    extra_: HashMap::new(),
+                    extra: HashMap::new(),
                 }]),
             )]),
         }
