@@ -97,7 +97,7 @@ fn load_data_storage(
                 loader::load_data_storage(storage.uri.clone(), &options_from_config)
             }
             None => {
-                panic!("sdfsdf")
+                panic!("must provide a config file if provided a data storage name.")
             }
         }
     }
