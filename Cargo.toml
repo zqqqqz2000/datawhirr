@@ -6,4 +6,7 @@ edition = "2021"
 [dependencies]
 chrono = "0.4.38"
 clap = { version = "4.5.4", features = ["derive"] }
+regex = "1.10.4"
+serde = { version = "1.0.201", features = ["derive"] }
+serde_yaml = "0.9.34"
 sqlx = { version = "0.7", features = ["runtime-tokio", "tls-native-tls"] }

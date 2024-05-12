@@ -1,5 +1,12 @@
+use core::panic;
+use std::{collections::HashMap, str::FromStr};
+mod config;
+
 use clap::Parser;
-mod datawhirr;
+mod data_storages;
+use config::Config;
+use data_storages::{data_storages::DataStorage, loader};
+use regex::Regex;
 
 #[derive(Parser, Debug)]
 #[command(version, about)]
@@ -10,7 +17,7 @@ struct Args {
     /// source of data, could be name in config or a protocol.
     /// e.g. mysql://xxxx:xxxx/xxxx
     #[arg(long)]
-    source: Option<String>,
+    source: String,
     /// options for source, e.g. --source_option 'query="select * from xxx"'. It's more recommands
     /// to write it into config file with source.
     #[arg(long)]
@@ -22,12 +29,65 @@ struct Args {
     #[arg(long)]
     source_schema: Option<String>,
     /// sink of data, could be name in config or a protocol, just like source.
-    sink: Option<String>,
+    sink: String,
     /// schema for sink.
     #[arg(long)]
     sink_schema: Option<String>,
 }
 
+// convert Vec["k1=v1", "k2=v2"] -> HashMap<"k1" -> "v1", "k2" -> "v2">
+fn convert_option(config: Vec<String>) -> HashMap<String, String> {
+    config
+        .into_iter()
+        .map(|each| {
+            if !each.contains("=") {
+                panic!("please specific config in format: 'k=v'.");
+            }
+            let mut split = each
+                .splitn(2, "=")
+                .map(String::from_str)
+                .map(|s| s.unwrap())
+                .collect::<Vec<_>>();
+            (split.swap_remove(0), split.swap_remove(1))
+        })
+        .collect::<HashMap<_, _>>()
+}
+
+fn load_data_storage(
+    uri_or_name: String,
+    config: &Option<Config>,
+    config_from_args: &HashMap<String, String>,
+) -> impl DataStorage {
+    let r = Regex::new(r"[a-zA-Z0-9]+://.*").unwrap();
+    if r.is_match(uri_or_name.as_str()) {
+        loader::load_data_storage(uri_or_name, config_from_args)
+    } else {
+        match config {
+            Some(c) => {
+                let storage = c
+                    .data_storages
+                    .get(&uri_or_name)
+                    .expect("cannot find any storages names: {uri_or_name} in config file.");
+                let mut options_from_config = storage.options.clone();
+                options_from_config.extend(config_from_args.clone());
+                loader::load_data_storage(storage.uri.clone(), &options_from_config)
+            }
+            None => {
+                panic!("sdfsdf")
+            }
+        }
+    }
+}
+
 fn main() {
     let args = Args::parse();
+    let config: Option<Config> = match args.config {
+        Some(config_path) => {
+            let f = std::fs::File::open(config_path).expect("cannot open file {config_path}");
+            Some(serde_yaml::from_reader(f).unwrap())
+        }
+        None => None,
+    };
+    let source = load_data_storage(args.source, &config, &convert_option(args.source_option));
+    let sink = load_data_storage(args.sink, &config, &convert_option(args.sink_option));
 }

@@ -1,9 +1,9 @@
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, error::Error};
 
-use chrono::{Date, DateTime, Utc};
-
-#[derive(Debug)]
-enum SchemaType {
+#[derive(Debug, Serialize, Deserialize)]
+pub enum SchemaType {
     String,
     Int32,
     Int64,
@@ -17,28 +17,28 @@ enum SchemaType {
 }
 
 #[derive(Clone)]
-enum SchemaTypeWithValue {
+pub enum SchemaTypeWithValue {
     String(String),
     Int32(i32),
     Int64(i64),
     Binary(Vec<char>),
     Boolean(bool),
     Timestamp(u32),
-    Date(Date<Utc>),
+    Date(DateTime<Utc>),
     Datetime(DateTime<Utc>),
     Double(f64),
     Float(f32),
 }
 
-#[derive(Debug)]
-struct SchemaField {
-    name: String,
-    type_: SchemaType,
-    extra: HashMap<String, String>,
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SchemaField {
+    pub name: String,
+    pub type_: SchemaType,
+    pub extra_: HashMap<String, String>,
 }
 
-struct Schema(Vec<SchemaField>);
-struct ExtraOptions(HashMap<String, String>);
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Schema(pub Vec<SchemaField>);
 
 #[derive(Clone)]
 struct Column {
@@ -47,7 +47,7 @@ struct Column {
 }
 
 #[derive(Clone)]
-struct Row(Vec<Column>);
+pub struct Row(Vec<Column>);
 impl Row {
     fn normalize(&self, schema: Schema) -> Row {
         // TODO: normailze
@@ -55,28 +55,29 @@ impl Row {
     }
 }
 
-trait ChunkReader {
+pub trait ChunkReader {
     async fn next(&self, chunk_size: u32) -> Result<Vec<Row>, impl Error>;
     async fn close(&mut self);
 }
 
-trait DataReader {
+pub trait DataReader {
     async fn chunk_read(&self) -> Result<impl ChunkReader, impl Error>;
     async fn read_all(&self) -> Result<Vec<Row>, impl Error>;
 }
 
-trait ChunkWriter {
+pub trait ChunkWriter {
     async fn write(&self, rows: Vec<Row>) -> Result<(), impl Error>;
     async fn close(&mut self);
 }
 
-trait DataWriter {
+pub trait DataWriter {
     async fn chunk_write(&self) -> Result<impl ChunkWriter, impl Error>;
     async fn write_all(&self, rows: Vec<Row>) -> Result<(), impl Error>;
 }
 
-trait DataStoreage {
-    async fn read_schema(&self, options: &ExtraOptions) -> Result<Schema, impl Error>;
-    async fn read(&self, options: &ExtraOptions) -> Result<impl DataReader, impl Error>;
-    async fn write(&self, options: &ExtraOptions) -> Result<impl DataWriter, impl Error>;
+pub trait DataStorage {
+    async fn read_schema(&self, options: &HashMap<String, String>) -> Result<Schema, impl Error>;
+    async fn read(&self, options: &HashMap<String, String>) -> Result<impl DataReader, impl Error>;
+    async fn write(&self, options: &HashMap<String, String>)
+        -> Result<impl DataWriter, impl Error>;
 }
