@@ -53,11 +53,11 @@ fn convert_option(config: Vec<String>) -> HashMap<String, String> {
     config
         .into_iter()
         .map(|each| {
-            if !each.contains("=") {
+            if !each.contains('=') {
                 panic!("please specific config in format: 'k=v'.");
             }
             let mut split = each
-                .splitn(2, "=")
+                .splitn(2, '=')
                 .map(String::from_str)
                 .map(|s| s.unwrap())
                 .collect::<Vec<_>>();
@@ -92,21 +92,21 @@ fn load_data_storage(
     }
 }
 
+fn exec_trans(args: TransOptions) {
+    let config: Option<Config> = match args.config {
+        Some(config_path) => {
+            let f = std::fs::File::open(config_path).expect("cannot open file {config_path}");
+            Some(serde_yaml::from_reader(f).unwrap())
+        }
+        None => None,
+    };
+    let source = load_data_storage(args.source, &config, &convert_option(args.source_option));
+    let sink = load_data_storage(args.sink, &config, &convert_option(args.sink_option));
+}
+
 fn main() {
     let cli = Cli::parse();
     match cli.command {
-        Subcommands::Trans(args) => {
-            let config: Option<Config> = match args.config {
-                Some(config_path) => {
-                    let f =
-                        std::fs::File::open(config_path).expect("cannot open file {config_path}");
-                    Some(serde_yaml::from_reader(f).unwrap())
-                }
-                None => None,
-            };
-            let source =
-                load_data_storage(args.source, &config, &convert_option(args.source_option));
-            let sink = load_data_storage(args.sink, &config, &convert_option(args.sink_option));
-        }
+        Subcommands::Trans(args) => exec_trans(args),
     };
 }
