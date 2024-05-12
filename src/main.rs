@@ -2,7 +2,7 @@ use core::panic;
 use std::{collections::HashMap, str::FromStr};
 mod config;
 
-use clap::Parser;
+use clap::{command, Parser, Subcommand};
 mod data_storages;
 use config::Config;
 use data_storages::{data_storages::DataStorage, loader};
@@ -10,7 +10,7 @@ use regex::Regex;
 
 #[derive(Parser, Debug)]
 #[command(version, about)]
-struct Args {
+struct TransOptions {
     /// config path for source and sink.
     #[arg(short, long)]
     config: Option<String>,
@@ -29,10 +29,23 @@ struct Args {
     #[arg(long)]
     source_schema: Option<String>,
     /// sink of data, could be name in config or a protocol, just like source.
+    #[arg(long)]
     sink: String,
     /// schema for sink.
     #[arg(long)]
     sink_schema: Option<String>,
+}
+
+#[derive(Subcommand)]
+enum Subcommands {
+    trans(TransOptions),
+}
+
+#[derive(Parser)]
+#[command(author, version, about)]
+struct Cli {
+    #[command(subcommand)]
+    command: Subcommands,
 }
 
 // convert Vec["k1=v1", "k2=v2"] -> HashMap<"k1" -> "v1", "k2" -> "v2">
@@ -80,14 +93,20 @@ fn load_data_storage(
 }
 
 fn main() {
-    let args = Args::parse();
-    let config: Option<Config> = match args.config {
-        Some(config_path) => {
-            let f = std::fs::File::open(config_path).expect("cannot open file {config_path}");
-            Some(serde_yaml::from_reader(f).unwrap())
+    let cli = Cli::parse();
+    match cli.command {
+        Subcommands::trans(args) => {
+            let config: Option<Config> = match args.config {
+                Some(config_path) => {
+                    let f =
+                        std::fs::File::open(config_path).expect("cannot open file {config_path}");
+                    Some(serde_yaml::from_reader(f).unwrap())
+                }
+                None => None,
+            };
+            let source =
+                load_data_storage(args.source, &config, &convert_option(args.source_option));
+            let sink = load_data_storage(args.sink, &config, &convert_option(args.sink_option));
         }
-        None => None,
     };
-    let source = load_data_storage(args.source, &config, &convert_option(args.source_option));
-    let sink = load_data_storage(args.sink, &config, &convert_option(args.sink_option));
 }
