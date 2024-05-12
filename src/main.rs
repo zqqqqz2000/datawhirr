@@ -38,7 +38,7 @@ struct TransOptions {
 
 #[derive(Subcommand)]
 enum Subcommands {
-    trans(TransOptions),
+    Trans(TransOptions),
 }
 
 #[derive(Parser)]
@@ -95,7 +95,7 @@ fn load_data_storage(
 fn main() {
     let cli = Cli::parse();
     match cli.command {
-        Subcommands::trans(args) => {
+        Subcommands::Trans(args) => {
             let config: Option<Config> = match args.config {
                 Some(config_path) => {
                     let f =
