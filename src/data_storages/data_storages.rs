@@ -57,13 +57,13 @@ impl Row {
 }
 
 pub trait ChunkReader {
-    async fn next(&self, chunk_size: u32) -> Result<Vec<Row>, impl Error>;
+    async fn next(&self, chunk_size: u32) -> Result<(Vec<Row>, Schema), impl Error>;
     async fn close(&mut self);
 }
 
 pub trait DataReader {
     async fn chunk_read(&self) -> Result<impl ChunkReader, impl Error>;
-    async fn read_all(&self) -> Result<Vec<Row>, impl Error>;
+    async fn read_all(&self) -> Result<(Vec<Row>, Schema), impl Error>;
 }
 
 pub trait ChunkWriter {
@@ -77,8 +77,18 @@ pub trait DataWriter {
 }
 
 pub trait DataStorage {
-    async fn read_schema(&self, options: &HashMap<String, String>) -> Result<Schema, impl Error>;
-    async fn read(&self, options: &HashMap<String, String>) -> Result<impl DataReader, impl Error>;
-    async fn write(&self, options: &HashMap<String, String>)
-        -> Result<impl DataWriter, impl Error>;
+    async fn read_schema(
+        &mut self,
+        options: &HashMap<String, String>,
+    ) -> Result<Schema, impl Error>;
+
+    async fn read(
+        &mut self,
+        options: &HashMap<String, String>,
+    ) -> Result<impl DataReader, impl Error>;
+
+    async fn write(
+        &mut self,
+        options: &HashMap<String, String>,
+    ) -> Result<impl DataWriter, impl Error>;
 }

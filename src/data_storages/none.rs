@@ -1,6 +1,8 @@
 use std::fmt;
 
-use super::data_storages::{ChunkReader, ChunkWriter, DataReader, DataStorage, DataWriter, Row};
+use super::data_storages::{
+    ChunkReader, ChunkWriter, DataReader, DataStorage, DataWriter, Row, Schema,
+};
 
 #[derive(Debug)]
 pub struct NoneStorage {}
@@ -18,7 +20,7 @@ impl fmt::Display for NoneErr {
 struct NoneReaderWriter {}
 
 impl ChunkReader for NoneReaderWriter {
-    async fn next(&self, chunk_size: u32) -> Result<Vec<Row>, impl std::error::Error> {
+    async fn next(&self, chunk_size: u32) -> Result<(Vec<Row>, Schema), impl std::error::Error> {
         Result::Err(NoneErr {})
     }
     async fn close(&mut self) {}
@@ -36,7 +38,7 @@ impl DataReader for NoneReaderWriter {
         Result::Err(NoneErr {})
     }
 
-    async fn read_all(&self) -> Result<Vec<Row>, impl std::error::Error> {
+    async fn read_all(&self) -> Result<(Vec<Row>, Schema), impl std::error::Error> {
         Result::Err(NoneErr {})
     }
 }
@@ -53,21 +55,21 @@ impl DataWriter for NoneReaderWriter {
 
 impl DataStorage for NoneStorage {
     async fn read_schema(
-        &self,
+        &mut self,
         options: &std::collections::HashMap<String, String>,
     ) -> Result<super::data_storages::Schema, impl std::error::Error> {
         Result::Err(NoneErr {})
     }
 
     async fn read(
-        &self,
+        &mut self,
         options: &std::collections::HashMap<String, String>,
     ) -> Result<NoneReaderWriter, impl std::error::Error> {
         Result::Err(NoneErr {})
     }
 
     async fn write(
-        &self,
+        &mut self,
         options: &std::collections::HashMap<String, String>,
     ) -> Result<NoneReaderWriter, impl std::error::Error> {
         Result::Err(NoneErr {})
