@@ -56,39 +56,23 @@ impl Row {
     }
 }
 
-pub trait ChunkReader {
-    async fn next(&self, chunk_size: u32) -> Result<(Vec<Row>, Schema), impl Error>;
-    async fn close(&mut self);
-}
-
-pub trait DataReader {
-    async fn chunk_read(&self) -> Result<impl ChunkReader, impl Error>;
-    async fn read_all(&self) -> Result<(Vec<Row>, Schema), impl Error>;
-}
-
-pub trait ChunkWriter {
-    async fn write(&self, rows: Vec<Row>) -> Result<(), impl Error>;
-    async fn close(&mut self);
-}
-
-pub trait DataWriter {
-    async fn chunk_write(&self) -> Result<impl ChunkWriter, impl Error>;
-    async fn write_all(&self, rows: Vec<Row>) -> Result<(), impl Error>;
-}
-
 pub trait DataStorage {
     async fn read_schema(
         &mut self,
         options: &HashMap<String, String>,
-    ) -> Result<Schema, impl Error>;
+    ) -> Result<Schema, Box<dyn Error>>;
 
     async fn read(
         &mut self,
         options: &HashMap<String, String>,
-    ) -> Result<impl DataReader, impl Error>;
+    ) -> Result<(Vec<Row>, Schema), Box<dyn Error>>;
 
-    async fn write(
+    async fn chunk_read(
         &mut self,
+        cursor: Option<String>,
+        limit: u32,
         options: &HashMap<String, String>,
-    ) -> Result<impl DataWriter, impl Error>;
+    ) -> Result<(Vec<Row>, Schema), Box<dyn Error>>;
+
+    async fn write(&mut self, options: &HashMap<String, String>) -> Result<(), Box<dyn Error>>;
 }

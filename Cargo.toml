@@ -10,4 +10,10 @@ futures = "0.3.30"
 regex = "1.10.4"
 serde = { version = "1.0.201", features = ["derive"] }
 serde_yaml = "0.9.34"
-sqlx = { version = "0.7", features = ["runtime-tokio", "tls-native-tls"] }
+sqlx = { version = "0.7", features = [
+  "runtime-tokio",
+  "tls-native-tls",
+  "postgres",
+  "mysql",
+] }
+tokio = { version = "1.37.0", features = ["rt", "test-util", "macros"] }
