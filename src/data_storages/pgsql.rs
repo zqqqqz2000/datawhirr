@@ -1,8 +1,20 @@
-use std::{borrow::BorrowMut, ops::Deref};
+use std::{
+    borrow::{Borrow, BorrowMut},
+    collections::HashMap,
+    fmt::Debug,
+    ops::Deref,
+};
 
-use super::{data_storages::DataStorage, none::NoneErr};
+use super::{
+    data_storages::{self, SchemaField},
+    none::NoneErr,
+};
 use futures::TryStreamExt;
-use sqlx::{error::Error as SqlXError, postgres::PgConnection, Column, Connection, Row};
+use sqlx::{
+    error::Error as SqlXError,
+    postgres::{PgConnection, PgRow},
+    Column, Connection, Row,
+};
 
 struct PgSqlStorage {
     connection: PgConnection,
@@ -16,7 +28,88 @@ impl PgSqlStorage {
     }
 }
 
-impl DataStorage for PgSqlStorage {
+struct Options {
+    pk: String,
+    query: String,
+}
+
+fn parse_options(options: &std::collections::HashMap<String, String>) -> Options {
+    let query = options
+        .get("table")
+        .or_else(|| options.get("query"))
+        .expect("cannot find any `query` or `table` in options")
+        .clone();
+    Options {
+        pk: options
+            .get("pk")
+            .expect("cannot find required options `pk` on chunk_read")
+            .clone(),
+        query: query,
+    }
+}
+
+fn sql_page_condition(limit: u32, pk: String, cursor: Option<String>) -> String {
+    match cursor {
+        // TODO: may not safe here, check pk
+        Some(ucursor) => format!("where {} > {} limit {}", pk, ucursor, limit),
+        _ => format!("limit {}", limit),
+    }
+}
+
+fn parse_col_to_typed_value(
+    type_name: &str,
+    column_name: &str,
+    row: &PgRow,
+) -> data_storages::SchemaTypeWithValue {
+    match type_name {
+        "STRING" => data_storages::SchemaTypeWithValue::String(row.get(column_name)),
+        unk => panic!("cannot parse type {unk}, may not supported yet."),
+    }
+}
+
+fn parse_pg_type(type_name: &str) -> data_storages::SchemaType {
+    match type_name {
+        "STRING" => data_storages::SchemaType::String,
+        unk => panic!("unknown type {unk} from postgres, may not supported yet."),
+    }
+}
+
+fn parse_row_schema(row: &PgRow) -> data_storages::Schema {
+    data_storages::Schema(
+        row.columns()
+            .into_iter()
+            .map(|column| {
+                let type_info = column.type_info();
+                let type_str = type_info.to_string();
+                let column_name = column.name();
+                SchemaField {
+                    name: column_name.to_string(),
+                    type_: parse_pg_type(&type_str),
+                    extra: HashMap::new(),
+                }
+            })
+            .collect::<Vec<_>>(),
+    )
+}
+
+fn pgrow_to_row(row: PgRow) -> data_storages::Row {
+    data_storages::Row(
+        row.columns()
+            .into_iter()
+            .map(|column| {
+                let type_info = column.type_info();
+                let type_str = type_info.to_string();
+                let column_name = column.name();
+                data_storages::Column {
+                    name: column_name.to_string(),
+                    value: parse_col_to_typed_value(type_str.as_str(), column_name, &row),
+                }
+            })
+            .collect::<Vec<_>>(),
+    )
+}
+
+impl data_storages::DataStorage for PgSqlStorage {
     async fn read_schema(
         &mut self,
         options: &std::collections::HashMap<String, String>,
@@ -33,15 +126,22 @@ impl DataStorage for PgSqlStorage {
         (Vec<super::data_storages::Row>, super::data_storages::Schema),
         Box<dyn std::error::Error>,
     > {
-        let mut rows = sqlx::query("select * from xxx").fetch(&mut self.connection);
+        let parsed_options = parse_options(options);
+        let sql = format!(
+            "select * from ({}) {}",
+            parsed_options.query,
+            sql_page_condition(limit, parsed_options.pk, cursor)
+        );
+        let mut rows = sqlx::query(sql.as_str()).fetch(&mut self.connection);
+        let mut results: Vec<data_storages::Row> = Vec::new();
+        let mut schema: Option<data_storages::Schema> = None;
         while let Some(row) = rows.try_next().await? {
-            for ele in row.columns() {
-                let type_info = ele.type_info();
-                println!("{}", type_info.to_string());
-                println!("{}, {:?}", ele.name(), type_info.kind());
+            if results.is_empty() {
+                schema = Some(parse_row_schema(&row));
             }
+            results.push(pgrow_to_row(row))
         }
-        Err(NoneErr {}.into())
+        Ok((results, schema.expect("cannot get any data from query")))
     }
 
     async fn write(

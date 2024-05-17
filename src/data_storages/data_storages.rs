@@ -42,15 +42,15 @@ pub struct SchemaField {
 pub struct Schema(pub Vec<SchemaField>);
 
 #[derive(Clone)]
-struct Column {
-    name: String,
-    value: SchemaTypeWithValue,
+pub struct Column {
+    pub name: String,
+    pub value: SchemaTypeWithValue,
 }
 
 #[derive(Clone)]
-pub struct Row(Vec<Column>);
+pub struct Row(pub Vec<Column>);
 impl Row {
-    fn normalize(&self, schema: Schema) -> Row {
+    pub fn normalize(&self, schema: Schema) -> Row {
         // TODO: normailze
         self.clone()
     }
