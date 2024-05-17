@@ -16,7 +16,7 @@ pub enum SchemaType {
     Float,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum SchemaTypeWithValue {
     String(String),
     Int32(i32),
@@ -41,13 +41,13 @@ pub struct SchemaField {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Schema(pub Vec<SchemaField>);
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Column {
     pub name: String,
     pub value: SchemaTypeWithValue,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Row(pub Vec<Column>);
 impl Row {
     pub fn normalize(&self, schema: Schema) -> Row {

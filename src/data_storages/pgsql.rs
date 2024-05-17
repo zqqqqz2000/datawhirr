@@ -29,11 +29,14 @@ struct Options {
 }
 
 fn parse_options(options: &std::collections::HashMap<&str, &str>) -> Options {
-    let query = options
-        .get("table")
-        .or_else(|| options.get("query"))
-        .expect("cannot find any `query` or `table` in options")
-        .clone();
+    let query = if let Some(table) = options.get("table") {
+        format!("select * from {}", table)
+    } else {
+        options
+            .get("query")
+            .expect("cannot find any `query` or `table` in options")
+            .to_string()
+    };
     Options {
         pk: options
             .get("pk")
@@ -57,14 +60,19 @@ fn parse_col_to_typed_value(
     row: &PgRow,
 ) -> data_storages::SchemaTypeWithValue {
     match type_name {
-        "STRING" => data_storages::SchemaTypeWithValue::String(row.get(column_name)),
+        "VARCHAR" => data_storages::SchemaTypeWithValue::String(row.get(column_name)),
+        "INT4" => data_storages::SchemaTypeWithValue::Int32(row.get(column_name)),
         unk => panic!("cannot parse type {unk}, may not supported yet."),
     }
 }
 
-fn parse_pg_type(type_name: &str) -> data_storages::SchemaType {
+fn parse_pg_type(type_name: &str) -> (data_storages::SchemaType, HashMap<String, String>) {
     match type_name {
-        "STRING" => data_storages::SchemaType::String,
+        "VARCHAR" => (data_storages::SchemaType::String, HashMap::new()),
+        "INT4" => (
+            data_storages::SchemaType::Int32,
+            HashMap::from([("length".to_string(), "4".to_string())]),
+        ),
         unk => panic!("unknown type {unk} from postgres, may not supported yet."),
     }
 }
@@ -77,10 +85,11 @@ fn parse_row_schema(row: &PgRow) -> data_storages::Schema {
                 let type_info = column.type_info();
                 let type_str = type_info.to_string();
                 let column_name = column.name();
+                let (type_, extra) = parse_pg_type(&type_str);
                 SchemaField {
                     name: column_name.to_string(),
-                    type_: parse_pg_type(&type_str),
-                    extra: HashMap::new(),
+                    type_: type_,
+                    extra: extra,
                 }
             })
             .collect::<Vec<_>>(),
@@ -169,9 +178,10 @@ mod tests {
         let mut sql_storage = PgSqlStorage::new("postgres://test:test@localhost:5432/test")
             .await
             .unwrap();
-        sql_storage
-            .chunk_read(None, 100, &HashMap::from([("pk", "a")]))
+        let (rows, schema) = sql_storage
+            .chunk_read(None, 100, &HashMap::from([("pk", "a"), ("table", "test")]))
             .await
             .unwrap();
+        rows.into_iter().for_each(|row| println!("{:?}", row));
     }
 }
