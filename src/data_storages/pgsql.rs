@@ -28,7 +28,7 @@ struct Options {
     query: String,
 }
 
-fn parse_options(options: &std::collections::HashMap<String, String>) -> Options {
+fn parse_options(options: &std::collections::HashMap<&str, &str>) -> Options {
     let query = options
         .get("table")
         .or_else(|| options.get("query"))
@@ -38,8 +38,8 @@ fn parse_options(options: &std::collections::HashMap<String, String>) -> Options
         pk: options
             .get("pk")
             .expect("cannot find required options `pk` on chunk_read")
-            .clone(),
-        query: query,
+            .to_string(),
+        query: query.to_string(),
     }
 }
 
@@ -107,7 +107,7 @@ fn pgrow_to_row(row: PgRow) -> data_storages::Row {
 impl data_storages::DataStorage for PgSqlStorage {
     async fn read_schema(
         &mut self,
-        options: &std::collections::HashMap<String, String>,
+        options: &std::collections::HashMap<&str, &str>,
     ) -> Result<super::data_storages::Schema, Box<dyn std::error::Error>> {
         Err(NoneErr {}.into())
     }
@@ -116,7 +116,7 @@ impl data_storages::DataStorage for PgSqlStorage {
         &mut self,
         cursor: Option<&str>,
         limit: u32,
-        options: &std::collections::HashMap<String, String>,
+        options: &std::collections::HashMap<&str, &str>,
     ) -> Result<
         (Vec<super::data_storages::Row>, super::data_storages::Schema),
         Box<dyn std::error::Error>,
@@ -141,14 +141,14 @@ impl data_storages::DataStorage for PgSqlStorage {
 
     async fn write(
         &mut self,
-        options: &std::collections::HashMap<String, String>,
+        options: &std::collections::HashMap<&str, &str>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         Err(NoneErr {}.into())
     }
 
     async fn read(
         &mut self,
-        options: &std::collections::HashMap<String, String>,
+        options: &std::collections::HashMap<&str, &str>,
     ) -> Result<
         (Vec<super::data_storages::Row>, super::data_storages::Schema),
         Box<dyn std::error::Error>,
@@ -170,7 +170,7 @@ mod tests {
             .await
             .unwrap();
         sql_storage
-            .chunk_read(None, 100, &HashMap::new())
+            .chunk_read(None, 100, &HashMap::from([("pk", "a")]))
             .await
             .unwrap();
     }

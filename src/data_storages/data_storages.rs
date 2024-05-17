@@ -59,20 +59,20 @@ impl Row {
 pub trait DataStorage {
     async fn read_schema(
         &mut self,
-        options: &HashMap<String, String>,
+        options: &HashMap<&str, &str>,
     ) -> Result<Schema, Box<dyn Error>>;
 
     async fn read(
         &mut self,
-        options: &HashMap<String, String>,
+        options: &HashMap<&str, &str>,
     ) -> Result<(Vec<Row>, Schema), Box<dyn Error>>;
 
     async fn chunk_read(
         &mut self,
         cursor: Option<&str>,
         limit: u32,
-        options: &HashMap<String, String>,
+        options: &HashMap<&str, &str>,
     ) -> Result<(Vec<Row>, Schema), Box<dyn Error>>;
 
-    async fn write(&mut self, options: &HashMap<String, String>) -> Result<(), Box<dyn Error>>;
+    async fn write(&mut self, options: &HashMap<&str, &str>) -> Result<(), Box<dyn Error>>;
 }

@@ -18,14 +18,14 @@ impl fmt::Display for NoneErr {
 impl DataStorage for NoneStorage {
     async fn read_schema(
         &mut self,
-        _: &std::collections::HashMap<String, String>,
+        _: &std::collections::HashMap<&str, &str>,
     ) -> Result<super::data_storages::Schema, Box<dyn std::error::Error>> {
         Err(NoneErr {}.into())
     }
 
     async fn read(
         &mut self,
-        _: &std::collections::HashMap<String, String>,
+        _: &std::collections::HashMap<&str, &str>,
     ) -> Result<
         (Vec<super::data_storages::Row>, super::data_storages::Schema),
         Box<dyn std::error::Error>,
@@ -35,7 +35,7 @@ impl DataStorage for NoneStorage {
 
     async fn write(
         &mut self,
-        _: &std::collections::HashMap<String, String>,
+        _: &std::collections::HashMap<&str, &str>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         Result::Err(NoneErr {}.into())
     }
@@ -44,7 +44,7 @@ impl DataStorage for NoneStorage {
         &mut self,
         _: Option<&str>,
         _: u32,
-        _: &std::collections::HashMap<String, String>,
+        _: &std::collections::HashMap<&str, &str>,
     ) -> Result<
         (Vec<super::data_storages::Row>, super::data_storages::Schema),
         Box<dyn std::error::Error>,
