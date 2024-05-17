@@ -69,7 +69,7 @@ pub trait DataStorage {
 
     async fn chunk_read(
         &mut self,
-        cursor: Option<String>,
+        cursor: Option<&str>,
         limit: u32,
         options: &HashMap<String, String>,
     ) -> Result<(Vec<Row>, Schema), Box<dyn Error>>;

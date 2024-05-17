@@ -42,7 +42,7 @@ impl DataStorage for NoneStorage {
 
     async fn chunk_read(
         &mut self,
-        _: Option<String>,
+        _: Option<&str>,
         _: u32,
         _: &std::collections::HashMap<String, String>,
     ) -> Result<

@@ -1,9 +1,4 @@
-use std::{
-    borrow::{Borrow, BorrowMut},
-    collections::HashMap,
-    fmt::Debug,
-    ops::Deref,
-};
+use std::collections::HashMap;
 
 use super::{
     data_storages::{self, SchemaField},
@@ -21,9 +16,9 @@ struct PgSqlStorage {
 }
 
 impl PgSqlStorage {
-    async fn new(uri: String) -> Result<Self, SqlXError> {
+    async fn new(uri: &str) -> Result<Self, SqlXError> {
         Ok(PgSqlStorage {
-            connection: PgConnection::connect(uri.as_str()).await?,
+            connection: PgConnection::connect(uri).await?,
         })
     }
 }
@@ -48,7 +43,7 @@ fn parse_options(options: &std::collections::HashMap<String, String>) -> Options
     }
 }
 
-fn sql_page_condition(limit: u32, pk: String, cursor: Option<String>) -> String {
+fn sql_page_condition(limit: u32, pk: &str, cursor: Option<&str>) -> String {
     match cursor {
         // TODO: may not safe here, check pk
         Some(ucursor) => format!("where {} > {} limit {}", pk, ucursor, limit),
@@ -119,7 +114,7 @@ impl data_storages::DataStorage for PgSqlStorage {
 
     async fn chunk_read(
         &mut self,
-        cursor: Option<String>,
+        cursor: Option<&str>,
         limit: u32,
         options: &std::collections::HashMap<String, String>,
     ) -> Result<
@@ -130,7 +125,7 @@ impl data_storages::DataStorage for PgSqlStorage {
         let sql = format!(
             "select * from ({}) {}",
             parsed_options.query,
-            sql_page_condition(limit, parsed_options.pk, cursor)
+            sql_page_condition(limit, parsed_options.pk.as_str(), cursor)
         );
         let mut rows = sqlx::query(sql.as_str()).fetch(&mut self.connection);
         let mut results: Vec<data_storages::Row> = Vec::new();
@@ -171,10 +166,9 @@ mod tests {
     use super::PgSqlStorage;
     #[tokio::test]
     async fn testtest() {
-        let mut sql_storage =
-            PgSqlStorage::new("postgres://test:test@localhost:5432/test".to_string())
-                .await
-                .unwrap();
+        let mut sql_storage = PgSqlStorage::new("postgres://test:test@localhost:5432/test")
+            .await
+            .unwrap();
         sql_storage
             .chunk_read(None, 100, &HashMap::new())
             .await
