@@ -1,4 +1,7 @@
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    fmt::{self, Display, Formatter},
+};
 
 use super::{
     data_storages::{self, SchemaField},
@@ -11,8 +14,31 @@ use sqlx::{
     Column, Connection, Row,
 };
 
+#[derive(Debug)]
+pub struct ParameterError {
+    reason: String,
+}
+impl std::error::Error for ParameterError {}
+
+impl Display for ParameterError {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        write!(f, "parameter error: {}", self.reason)
+    }
+}
+impl ParameterError {
+    fn new(reason: &str) -> ParameterError {
+        ParameterError {
+            reason: reason.to_string(),
+        }
+    }
+}
+
 struct PgSqlStorage {
     connection: PgConnection,
+}
+
+fn valid_symbol(table_or_col_name: &str) {
+    // TODO: valid symbol, panic if invalid
 }
 
 impl PgSqlStorage {
@@ -23,12 +49,12 @@ impl PgSqlStorage {
     }
 }
 
-struct Options {
+struct ChunkReadOptions {
     pk: String,
     query: String,
 }
 
-fn parse_options(options: &std::collections::HashMap<&str, &str>) -> Options {
+fn parse_chunkread_options(options: &std::collections::HashMap<&str, &str>) -> ChunkReadOptions {
     let query = if let Some(table) = options.get("table") {
         format!("select * from {}", table)
     } else {
@@ -37,7 +63,7 @@ fn parse_options(options: &std::collections::HashMap<&str, &str>) -> Options {
             .expect("cannot find any `query` or `table` in options")
             .to_string()
     };
-    Options {
+    ChunkReadOptions {
         pk: options
             .get("pk")
             .expect("cannot find required options `pk` on chunk_read")
@@ -47,8 +73,8 @@ fn parse_options(options: &std::collections::HashMap<&str, &str>) -> Options {
 }
 
 fn sql_page_condition(limit: u32, pk: &str, cursor: Option<&str>) -> String {
+    valid_symbol(pk);
     match cursor {
-        // TODO: may not safe here, check pk
         Some(ucursor) => format!("where {} > {} limit {}", pk, ucursor, limit),
         _ => format!("limit {}", limit),
     }
@@ -113,12 +139,70 @@ fn pgrow_to_row(row: PgRow) -> data_storages::Row {
     )
 }
 
+struct ColumnSchemaInDB {
+    column_name: String,
+    udt_name: String,
+    is_nullable: Option<String>,
+    character_maximum_length: Option<i32>,
+}
+
+fn bool_str(b: bool) -> String {
+    if b { "true" } else { "false" }.to_string()
+}
+
+impl ColumnSchemaInDB {
+    fn to_data_schema(&self) -> data_storages::SchemaField {
+        let mut extra: HashMap<String, String> =
+            HashMap::from([("pg_type".to_string(), self.udt_name.clone())]);
+        if let Some(nullable) = &self.is_nullable {
+            extra.insert("nullable".to_string(), bool_str(nullable == "YES"));
+        }
+        if let Some(length) = self.character_maximum_length {
+            extra.insert("length".to_string(), length.to_string());
+        }
+        match self.udt_name.as_str() {
+            "varchar" => data_storages::SchemaField {
+                name: self.column_name.clone(),
+                type_: data_storages::SchemaType::String,
+                extra,
+            },
+            "int4" => data_storages::SchemaField {
+                name: self.column_name.clone(),
+                type_: data_storages::SchemaType::Int32,
+                extra,
+            },
+            unk => panic!("cannot parse type {unk}, may not supported yet."),
+        }
+    }
+}
+
 impl data_storages::DataStorage for PgSqlStorage {
     async fn read_schema(
         &mut self,
         options: &std::collections::HashMap<&str, &str>,
     ) -> Result<super::data_storages::Schema, Box<dyn std::error::Error>> {
-        Err(NoneErr {}.into())
+        if let Some(table) = options.get("table") {
+            let sql = "
+            SELECT *  
+            FROM information_schema.columns 
+            WHERE table_name = $1";
+            let mut rows = sqlx::query(sql).bind(table).fetch(&mut self.connection);
+            let mut results: Vec<data_storages::SchemaField> = Vec::new();
+            while let Some(row) = rows.try_next().await? {
+                results.push(
+                    ColumnSchemaInDB {
+                        column_name: row.get("column_name"),
+                        udt_name: row.get("udt_name"),
+                        is_nullable: row.get("is_nullable"),
+                        character_maximum_length: row.get("character_maximum_length"),
+                    }
+                    .to_data_schema(),
+                )
+            }
+            Ok(data_storages::Schema(results))
+        } else {
+            Err(ParameterError::new("cannot find `table` in options").into())
+        }
     }
 
     async fn chunk_read(
@@ -130,7 +214,7 @@ impl data_storages::DataStorage for PgSqlStorage {
         (Vec<super::data_storages::Row>, super::data_storages::Schema),
         Box<dyn std::error::Error>,
     > {
-        let parsed_options = parse_options(options);
+        let parsed_options = parse_chunkread_options(options);
         let sql = format!(
             "select * from ({}) {}",
             parsed_options.query,
@@ -175,13 +259,14 @@ mod tests {
     use super::PgSqlStorage;
     #[tokio::test]
     async fn testtest() {
+        let options = HashMap::from([("pk", "a"), ("table", "test")]);
         let mut sql_storage = PgSqlStorage::new("postgres://test:test@localhost:5432/test")
             .await
             .unwrap();
-        let (rows, schema) = sql_storage
-            .chunk_read(None, 100, &HashMap::from([("pk", "a"), ("table", "test")]))
-            .await
-            .unwrap();
+        let (rows, schema) = sql_storage.chunk_read(None, 100, &options).await.unwrap();
         rows.into_iter().for_each(|row| println!("{:?}", row));
+        let schema_from_table = sql_storage.read_schema(&options).await.unwrap();
+        println!("{:?}", schema_from_table);
+        panic!("fuck");
     }
 }
