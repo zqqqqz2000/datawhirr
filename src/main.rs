@@ -5,7 +5,6 @@ mod config;
 use clap::{command, Parser, Subcommand};
 mod data_storages;
 use config::Config;
-use data_storages::{data_storages::DataStorage, loader};
 use regex::Regex;
 
 #[derive(Parser, Debug)]
@@ -77,24 +76,25 @@ fn convert_option(config: Vec<String>) -> HashMap<String, String> {
         .collect::<HashMap<_, _>>()
 }
 
-fn load_data_storage(
-    uri_or_name: String,
+async fn load_data_storage(
+    uri_or_name: &str,
     config: &Option<Config>,
     config_from_args: &HashMap<String, String>,
-) -> impl DataStorage {
+) -> impl data_storages::DataStorage {
     let r = Regex::new(r"[a-zA-Z0-9]+://.*").unwrap();
-    if r.is_match(uri_or_name.as_str()) {
-        loader::load_data_storage(uri_or_name, config_from_args)
+    if r.is_match(uri_or_name) {
+        data_storages::loader::load_data_storage(uri_or_name, config_from_args).await
     } else {
         match config {
             Some(c) => {
                 let storage = c
                     .data_storages
-                    .get(&uri_or_name)
+                    .get(uri_or_name)
                     .expect("cannot find any storages names: {uri_or_name} in config file.");
                 let mut options_from_config = storage.options.clone();
                 options_from_config.extend(config_from_args.clone());
-                loader::load_data_storage(storage.uri.clone(), &options_from_config)
+                data_storages::loader::load_data_storage(storage.uri.as_str(), &options_from_config)
+                    .await
             }
             None => {
                 panic!("must provide a config file if provided a data storage name.")
@@ -111,8 +111,10 @@ fn exec_trans(args: TransOptions) {
         }
         None => None,
     };
-    let source = load_data_storage(args.source, &config, &convert_option(args.source_option));
-    let sink = load_data_storage(args.sink, &config, &convert_option(args.sink_option));
+    let src_options = convert_option(args.source_option);
+    let sink_options = convert_option(args.sink_option);
+    let source = load_data_storage(args.source.as_str(), &config, &src_options);
+    let sink = load_data_storage(args.sink.as_str(), &config, &sink_options);
 }
 
 fn main() {

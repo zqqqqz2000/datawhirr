@@ -1,12 +1,9 @@
+use super::super::data_storages;
 use std::{
     collections::HashMap,
     fmt::{self, Display, Formatter},
 };
 
-use super::{
-    data_storages::{self, SchemaField},
-    none::NoneErr,
-};
 use futures::TryStreamExt;
 use sqlx::{
     error::Error as SqlXError,
@@ -33,7 +30,7 @@ impl ParameterError {
     }
 }
 
-struct PgSqlStorage {
+pub struct PgSqlStorage {
     connection: PgConnection,
 }
 
@@ -42,7 +39,7 @@ fn valid_symbol(table_or_col_name: &str) {
 }
 
 impl PgSqlStorage {
-    async fn new(uri: &str) -> Result<Self, SqlXError> {
+    pub async fn new(uri: &str) -> Result<Self, SqlXError> {
         Ok(PgSqlStorage {
             connection: PgConnection::connect(uri).await?,
         })
@@ -112,7 +109,7 @@ fn parse_row_schema(row: &PgRow) -> data_storages::Schema {
                 let type_str = type_info.to_string();
                 let column_name = column.name();
                 let (type_, extra) = parse_pg_type(&type_str);
-                SchemaField {
+                data_storages::SchemaField {
                     name: column_name.to_string(),
                     type_: type_,
                     extra: extra,
@@ -180,7 +177,7 @@ impl data_storages::DataStorage for PgSqlStorage {
     async fn read_schema(
         &mut self,
         options: &std::collections::HashMap<&str, &str>,
-    ) -> Result<super::data_storages::Schema, Box<dyn std::error::Error>> {
+    ) -> Result<data_storages::Schema, Box<dyn std::error::Error>> {
         if let Some(table) = options.get("table") {
             let sql = "
             SELECT *  
@@ -210,10 +207,7 @@ impl data_storages::DataStorage for PgSqlStorage {
         cursor: Option<&str>,
         limit: u32,
         options: &std::collections::HashMap<&str, &str>,
-    ) -> Result<
-        (Vec<super::data_storages::Row>, super::data_storages::Schema),
-        Box<dyn std::error::Error>,
-    > {
+    ) -> Result<(Vec<data_storages::Row>, data_storages::Schema), Box<dyn std::error::Error>> {
         let parsed_options = parse_chunkread_options(options);
         let sql = format!(
             "select * from ({}) {}",
@@ -236,17 +230,14 @@ impl data_storages::DataStorage for PgSqlStorage {
         &mut self,
         options: &std::collections::HashMap<&str, &str>,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        Err(NoneErr {}.into())
+        Err(ParameterError::new("notimpl").into())
     }
 
     async fn read(
         &mut self,
         options: &std::collections::HashMap<&str, &str>,
-    ) -> Result<
-        (Vec<super::data_storages::Row>, super::data_storages::Schema),
-        Box<dyn std::error::Error>,
-    > {
-        Err(NoneErr {}.into())
+    ) -> Result<(Vec<data_storages::Row>, data_storages::Schema), Box<dyn std::error::Error>> {
+        Err(ParameterError::new("notimpl").into())
     }
 }
 
