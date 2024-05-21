@@ -19,9 +19,10 @@ pub fn parse_col_to_typed_value(
         "INT4" => Ok(data_storages::SchemaTypeWithValue::Int32(
             row.get(column_name),
         )),
-        unk => Err(
-            ParseError::new("cannot parse type {unk} from pg row, may not supported yet.").into(),
-        ),
+        unk => Err(ParseError::new(
+            format!("cannot parse type {unk} from pg row, may not supported yet.").as_str(),
+        )
+        .into()),
     }
 }
 
@@ -34,9 +35,10 @@ fn parse_pg_type(
             data_storages::SchemaType::Int32,
             HashMap::from([("length".to_string(), "4".to_string())]),
         )),
-        unk => {
-            Err(ParseError::new("unknown type {unk} from pg row, may not supported yet.").into())
-        }
+        unk => Err(ParseError::new(
+            format!("unknown type {unk} from pg row, may not supported yet.").as_str(),
+        )
+        .into()),
     }
 }
 
@@ -98,7 +100,10 @@ impl ColumnSchemaInDB {
                 type_: data_storages::SchemaType::Int32,
                 extra,
             }),
-            unk => Err(ParseError::new("cannot parse type {unk}, may not supported yet.").into()),
+            unk => Err(ParseError::new(
+                format!("cannot parse type {unk}, may not supported yet.").as_str(),
+            )
+            .into()),
         }
     }
 }
