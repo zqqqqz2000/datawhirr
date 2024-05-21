@@ -1,8 +1,10 @@
 use crate::data_storages::{
     data_storages,
-    pgsql::parser::{parse_col_to_typed_value, parse_row_schema, ColumnSchemaInDB},
+    pgsql::{
+        error::ParameterError,
+        parser::{parse_col_to_typed_value, parse_row_schema, ColumnSchemaInDB},
+    },
 };
-use std::fmt::{self, Display, Formatter};
 
 use futures::TryStreamExt;
 use sqlx::{
@@ -11,31 +13,12 @@ use sqlx::{
     Column, Connection, Row,
 };
 
-#[derive(Debug)]
-pub struct ParameterError {
-    reason: String,
-}
-impl std::error::Error for ParameterError {}
-
-impl Display for ParameterError {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        write!(f, "parameter error: {}", self.reason)
-    }
-}
-impl ParameterError {
-    fn new(reason: &str) -> ParameterError {
-        ParameterError {
-            reason: reason.to_string(),
-        }
-    }
-}
-
 pub struct PgSqlStorage {
     connection: PgConnection,
 }
 
-fn valid_symbol(table_or_col_name: &str) {
-    // TODO: valid symbol, panic if invalid
+fn valid_symbol(table_or_col_name: &str) -> Result<(), Box<dyn std::error::Error>> {
+    Ok(())
 }
 
 impl PgSqlStorage {
@@ -69,29 +52,33 @@ fn parse_chunkread_options(options: &std::collections::HashMap<&str, &str>) -> C
     }
 }
 
-fn sql_page_condition(limit: u32, pk: &str, cursor: Option<&str>) -> String {
-    valid_symbol(pk);
-    match cursor {
+fn sql_page_condition(
+    limit: u32,
+    pk: &str,
+    cursor: Option<&str>,
+) -> Result<String, Box<dyn std::error::Error>> {
+    valid_symbol(pk)?;
+    Ok(match cursor {
         Some(ucursor) => format!("where {} > {} limit {}", pk, ucursor, limit),
         _ => format!("limit {}", limit),
-    }
+    })
 }
 
-fn pgrow_to_row(row: PgRow) -> data_storages::Row {
-    data_storages::Row(
+fn pgrow_to_row(row: PgRow) -> Result<data_storages::Row, Box<dyn std::error::Error>> {
+    Ok(data_storages::Row(
         row.columns()
             .iter()
             .map(|column| {
                 let type_info = column.type_info();
                 let type_str = type_info.to_string();
                 let column_name = column.name();
-                data_storages::Column {
+                Ok(data_storages::Column {
                     name: column_name.to_string(),
-                    value: parse_col_to_typed_value(type_str.as_str(), column_name, &row),
-                }
+                    value: parse_col_to_typed_value(type_str.as_str(), column_name, &row)?,
+                })
             })
-            .collect::<Vec<_>>(),
-    )
+            .collect::<Result<Vec<_>, Box<dyn std::error::Error>>>()?,
+    ))
 }
 
 impl data_storages::DataStorage for PgSqlStorage {
@@ -107,7 +94,7 @@ impl data_storages::DataStorage for PgSqlStorage {
             let mut rows = sqlx::query(sql).bind(table).fetch(&mut self.connection);
             let mut results: Vec<data_storages::SchemaField> = Vec::new();
             while let Some(row) = rows.try_next().await? {
-                results.push(ColumnSchemaInDB::from(row).to_data_schema())
+                results.push(ColumnSchemaInDB::from(row).to_data_schema()?)
             }
             Ok(data_storages::Schema(results))
         } else {
@@ -125,16 +112,16 @@ impl data_storages::DataStorage for PgSqlStorage {
         let sql = format!(
             "select * from ({}) {}",
             parsed_options.query,
-            sql_page_condition(limit, parsed_options.pk.as_str(), cursor)
+            sql_page_condition(limit, parsed_options.pk.as_str(), cursor)?
         );
         let mut rows = sqlx::query(sql.as_str()).fetch(&mut self.connection);
         let mut results: Vec<data_storages::Row> = Vec::new();
         let mut schema: Option<data_storages::Schema> = None;
         while let Some(row) = rows.try_next().await? {
             if results.is_empty() {
-                schema = Some(parse_row_schema(&row));
+                schema = Some(parse_row_schema(&row)?);
             }
-            results.push(pgrow_to_row(row))
+            results.push(pgrow_to_row(row)?)
         }
         Ok((results, schema.expect("cannot get any data from query")))
     }
