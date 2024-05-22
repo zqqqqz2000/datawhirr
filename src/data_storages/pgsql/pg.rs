@@ -1,6 +1,5 @@
 use crate::data_storages::{
-    data_storages::{self, ReadResult, SchemaTypeWithValue},
-    none::NoneErr,
+    data_storages::{self, ReadResult, SchemaType, SchemaTypeWithValue},
     pgsql::{
         error::ParameterError,
         parser::{parse_col_to_typed_value, parse_row_schema, ColumnSchemaInDB},
@@ -9,6 +8,7 @@ use crate::data_storages::{
 
 use futures::TryStreamExt;
 use regex::Regex;
+use serde_yaml::to_string;
 use sqlx::{
     error::Error as SqlXError,
     postgres::{PgConnection, PgRow},
@@ -38,7 +38,9 @@ impl PgSqlStorage {
 
 struct ChunkReadOptions {
     pk: String,
+    pk_type: Option<SchemaType>,
     query: String,
+    table: Option<String>,
 }
 
 fn parse_chunkread_options(
@@ -61,22 +63,31 @@ fn parse_chunkread_options(
                 "cannot find required options `pk` on chunk_read",
             ))?
             .to_string(),
+        pk_type: options
+            .get("pk_type")
+            .map(|str_type| option_str_to_type(str_type))
+            .transpose()?,
         query: query.to_string(),
+        table: options.get("table").map(|s| s.to_string()),
     })
+}
+
+fn option_str_to_type(type_str: &str) -> Result<SchemaType, Box<dyn std::error::Error>> {
+    match type_str {
+        "varchar" => Ok(SchemaType::String),
+        unk => Err(ParameterError::new(format!("unknow pk type {unk}").as_str()).into()),
+    }
 }
 
 fn sql_page_condition(
     limit: u32,
     pk: &str,
-    cursor: Option<&str>,
+    cursor_exist: bool,
 ) -> Result<String, Box<dyn std::error::Error>> {
     valid_symbol(pk)?;
-    Ok(match cursor {
-        Some(ucursor) => format!(
-            "where {} > {} order by {} asc limit {}",
-            pk, ucursor, pk, limit
-        ),
-        _ => format!("limit {}", limit),
+    Ok(match cursor_exist {
+        true => format!("where '{}' > {{}} order by {} asc limit {}", pk, pk, limit),
+        false => format!("limit {}", limit),
     })
 }
 
@@ -128,7 +139,7 @@ impl data_storages::DataStorage for PgSqlStorage {
         let sql = format!(
             "select * from ({}) {}",
             parsed_options.query,
-            sql_page_condition(limit, parsed_options.pk.as_str(), cursor)?
+            sql_page_condition(limit, parsed_options.pk.as_str(), cursor.is_some())?
         );
         let mut rows = sqlx::query(sql.as_str()).fetch(&mut self.connection);
         let mut results: Vec<data_storages::Row> = Vec::new();
@@ -177,8 +188,8 @@ mod tests {
         let mut sql_storage = PgSqlStorage::new("postgres://test:test@localhost:5432/test")
             .await
             .unwrap();
-        let (rows, schema) = sql_storage.chunk_read(None, 100, &options).await.unwrap();
-        rows.into_iter().for_each(|row| println!("{:?}", row));
+        let res = sql_storage.chunk_read(None, 100, &options).await.unwrap();
+        res.data.into_iter().for_each(|row| println!("{:?}", row));
         let schema_from_table = sql_storage.read_schema(&options).await.unwrap();
         println!("{:?}", schema_from_table);
         panic!("fuck");
