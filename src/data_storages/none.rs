@@ -1,6 +1,6 @@
 use std::fmt;
 
-use super::data_storages::DataStorage;
+use super::data_storages::{DataStorage, ReadResult, SchemaTypeWithValue};
 
 #[derive(Debug)]
 pub struct NoneStorage {}
@@ -26,10 +26,7 @@ impl DataStorage for NoneStorage {
     async fn read(
         &mut self,
         _: &std::collections::HashMap<&str, &str>,
-    ) -> Result<
-        (Vec<super::data_storages::Row>, super::data_storages::Schema),
-        Box<dyn std::error::Error>,
-    > {
+    ) -> Result<ReadResult, Box<dyn std::error::Error>> {
         Err(NoneErr {}.into())
     }
 
@@ -42,13 +39,10 @@ impl DataStorage for NoneStorage {
 
     async fn chunk_read(
         &mut self,
-        _: Option<&str>,
+        _: Option<SchemaTypeWithValue>,
         _: u32,
         _: &std::collections::HashMap<&str, &str>,
-    ) -> Result<
-        (Vec<super::data_storages::Row>, super::data_storages::Schema),
-        Box<dyn std::error::Error>,
-    > {
+    ) -> Result<ReadResult, Box<dyn std::error::Error>> {
         Err(NoneErr {}.into())
     }
 }

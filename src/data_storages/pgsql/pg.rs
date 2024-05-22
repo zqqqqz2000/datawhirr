@@ -1,5 +1,6 @@
 use crate::data_storages::{
-    data_storages,
+    data_storages::{self, ReadResult, SchemaTypeWithValue},
+    none::NoneErr,
     pgsql::{
         error::ParameterError,
         parser::{parse_col_to_typed_value, parse_row_schema, ColumnSchemaInDB},
@@ -71,7 +72,10 @@ fn sql_page_condition(
 ) -> Result<String, Box<dyn std::error::Error>> {
     valid_symbol(pk)?;
     Ok(match cursor {
-        Some(ucursor) => format!("where {} > {} limit {}", pk, ucursor, limit),
+        Some(ucursor) => format!(
+            "where {} > {} order by {} asc limit {}",
+            pk, ucursor, pk, limit
+        ),
         _ => format!("limit {}", limit),
     })
 }
@@ -116,10 +120,10 @@ impl data_storages::DataStorage for PgSqlStorage {
 
     async fn chunk_read(
         &mut self,
-        cursor: Option<&str>,
+        cursor: Option<SchemaTypeWithValue>,
         limit: u32,
         options: &std::collections::HashMap<&str, &str>,
-    ) -> Result<(Vec<data_storages::Row>, data_storages::Schema), Box<dyn std::error::Error>> {
+    ) -> Result<ReadResult, Box<dyn std::error::Error>> {
         let parsed_options = parse_chunkread_options(options)?;
         let sql = format!(
             "select * from ({}) {}",
@@ -136,7 +140,11 @@ impl data_storages::DataStorage for PgSqlStorage {
             results.push(pgrow_to_row(row)?)
         }
         if let Some(schema_value) = schema {
-            Ok((results, schema_value))
+            Ok(ReadResult {
+                data: results,
+                schema: schema_value,
+                cursor: None,
+            })
         } else {
             Err(ParameterError::new("cannot get any data from query").into())
         }
@@ -152,7 +160,7 @@ impl data_storages::DataStorage for PgSqlStorage {
     async fn read(
         &mut self,
         options: &std::collections::HashMap<&str, &str>,
-    ) -> Result<(Vec<data_storages::Row>, data_storages::Schema), Box<dyn std::error::Error>> {
+    ) -> Result<ReadResult, Box<dyn std::error::Error>> {
         Err(ParameterError::new("notimpl").into())
     }
 }

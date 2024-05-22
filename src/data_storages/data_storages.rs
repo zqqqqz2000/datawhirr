@@ -56,23 +56,26 @@ impl Row {
     }
 }
 
+pub struct ReadResult {
+    pub data: Vec<Row>,
+    pub schema: Schema,
+    pub cursor: Option<SchemaTypeWithValue>,
+}
+
 pub trait DataStorage {
     async fn read_schema(
         &mut self,
         options: &HashMap<&str, &str>,
     ) -> Result<Schema, Box<dyn Error>>;
 
-    async fn read(
-        &mut self,
-        options: &HashMap<&str, &str>,
-    ) -> Result<(Vec<Row>, Schema), Box<dyn Error>>;
+    async fn read(&mut self, options: &HashMap<&str, &str>) -> Result<ReadResult, Box<dyn Error>>;
 
     async fn chunk_read(
         &mut self,
-        cursor: Option<&str>,
+        cursor: Option<SchemaTypeWithValue>,
         limit: u32,
         options: &HashMap<&str, &str>,
-    ) -> Result<(Vec<Row>, Schema), Box<dyn Error>>;
+    ) -> Result<ReadResult, Box<dyn Error>>;
 
     async fn write(&mut self, options: &HashMap<&str, &str>) -> Result<(), Box<dyn Error>>;
 }
