@@ -7,6 +7,7 @@ use crate::data_storages::{
 };
 
 use futures::TryStreamExt;
+use regex::Regex;
 use sqlx::{
     error::Error as SqlXError,
     postgres::{PgConnection, PgRow},
@@ -18,7 +19,12 @@ pub struct PgSqlStorage {
 }
 
 fn valid_symbol(table_or_col_name: &str) -> Result<(), Box<dyn std::error::Error>> {
-    Ok(())
+    let table_col_re = Regex::new("^[a-zA-Z_][a-zA-Z0-9_]{0,127}$")?;
+    if table_col_re.is_match(table_or_col_name) {
+        Ok(())
+    } else {
+        Err(ParameterError::new("invalid table or column name").into())
+    }
 }
 
 impl PgSqlStorage {
