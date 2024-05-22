@@ -40,22 +40,28 @@ struct ChunkReadOptions {
     query: String,
 }
 
-fn parse_chunkread_options(options: &std::collections::HashMap<&str, &str>) -> ChunkReadOptions {
+fn parse_chunkread_options(
+    options: &std::collections::HashMap<&str, &str>,
+) -> Result<ChunkReadOptions, Box<dyn std::error::Error>> {
     let query = if let Some(table) = options.get("table") {
         format!("select * from {}", table)
     } else {
         options
             .get("query")
-            .expect("cannot find any `query` or `table` in options")
+            .ok_or(ParameterError::new(
+                "cannot find any `query` or `table` in options",
+            ))?
             .to_string()
     };
-    ChunkReadOptions {
+    Ok(ChunkReadOptions {
         pk: options
             .get("pk")
-            .expect("cannot find required options `pk` on chunk_read")
+            .ok_or(ParameterError::new(
+                "cannot find required options `pk` on chunk_read",
+            ))?
             .to_string(),
         query: query.to_string(),
-    }
+    })
 }
 
 fn sql_page_condition(
@@ -114,7 +120,7 @@ impl data_storages::DataStorage for PgSqlStorage {
         limit: u32,
         options: &std::collections::HashMap<&str, &str>,
     ) -> Result<(Vec<data_storages::Row>, data_storages::Schema), Box<dyn std::error::Error>> {
-        let parsed_options = parse_chunkread_options(options);
+        let parsed_options = parse_chunkread_options(options)?;
         let sql = format!(
             "select * from ({}) {}",
             parsed_options.query,
@@ -129,7 +135,11 @@ impl data_storages::DataStorage for PgSqlStorage {
             }
             results.push(pgrow_to_row(row)?)
         }
-        Ok((results, schema.expect("cannot get any data from query")))
+        if let Some(schema_value) = schema {
+            Ok((results, schema_value))
+        } else {
+            Err(ParameterError::new("cannot get any data from query").into())
+        }
     }
 
     async fn write(
@@ -149,11 +159,10 @@ impl data_storages::DataStorage for PgSqlStorage {
 
 #[cfg(test)]
 mod tests {
+    use super::{valid_symbol, PgSqlStorage};
+    use crate::data_storages::data_storages::DataStorage;
     use std::collections::HashMap;
 
-    use crate::data_storages::data_storages::DataStorage;
-
-    use super::PgSqlStorage;
     #[tokio::test]
     async fn testtest() {
         let options = HashMap::from([("pk", "a"), ("table", "test")]);
@@ -165,5 +174,13 @@ mod tests {
         let schema_from_table = sql_storage.read_schema(&options).await.unwrap();
         println!("{:?}", schema_from_table);
         panic!("fuck");
+    }
+
+    #[test]
+    fn test_valid_symbol() {
+        assert!(valid_symbol("valid").is_ok());
+        assert!(valid_symbol("_valid").is_ok());
+        assert!(valid_symbol("_124v_456alid").is_ok());
+        assert!(valid_symbol("0_not_valid").is_err());
     }
 }
