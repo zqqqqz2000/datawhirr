@@ -3,12 +3,12 @@ use crate::data_storages::{
     pgsql::{
         error::ParameterError,
         parser::{parse_col_to_typed_value, parse_row_schema, ColumnSchemaInDB},
+        utils,
     },
 };
 
 use futures::TryStreamExt;
 use regex::Regex;
-use serde_yaml::to_string;
 use sqlx::{
     error::Error as SqlXError,
     postgres::{PgConnection, PgRow},
@@ -145,9 +145,11 @@ impl data_storages::DataStorage for PgSqlStorage {
         let mut results: Vec<data_storages::Row> = Vec::new();
         let mut schema: Option<data_storages::Schema> = None;
         while let Some(row) = rows.try_next().await? {
-            if results.is_empty() {
+            if let Some(s) = schema {
+                schema = Some(utils::merge_schema(&s, &parse_row_schema(&row)?));
+            } else {
                 schema = Some(parse_row_schema(&row)?);
-            }
+            };
             results.push(pgrow_to_row(row)?)
         }
         if let Some(schema_value) = schema {

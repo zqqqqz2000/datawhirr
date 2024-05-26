@@ -14,6 +14,7 @@ pub enum SchemaType {
     Datetime,
     Double,
     Float,
+    None,
 }
 
 #[derive(Clone, Debug)]
@@ -28,6 +29,7 @@ pub enum SchemaTypeWithValue {
     Datetime(DateTime<Utc>),
     Double(f64),
     Float(f32),
+    None,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
