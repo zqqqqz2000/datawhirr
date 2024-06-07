@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, error::Error};
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum SchemaType {
     String,
     Int32,
@@ -32,7 +32,7 @@ pub enum SchemaTypeWithValue {
     None,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SchemaField {
     pub name: String,
     #[serde(rename(serialize = "type", deserialize = "type"))]

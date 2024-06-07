@@ -9,11 +9,11 @@ pub fn bool_str(b: bool) -> String {
     if b { "true" } else { "false" }.to_string()
 }
 
-fn schema_fieldname_to_field(schema: &Schema) -> HashMap<&str, &SchemaField> {
+fn schema_fieldname_to_field(schema: &Schema) -> HashMap<&str, SchemaField> {
     schema
         .0
         .iter()
-        .map(|schema| (schema.name.as_str(), schema))
+        .map(|schema| (schema.name.as_str(), *schema.clone()))
         .collect::<_>()
 }
 
