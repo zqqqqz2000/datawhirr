@@ -9,6 +9,6 @@ pub async fn load_data_storage(
     if storage_uri.starts_with("postgres://") {
         PgSqlStorage::new(storage_uri).await.unwrap()
     } else {
-        panic!("");
+        panic!("not supported this type of uri yet");
     }
 }

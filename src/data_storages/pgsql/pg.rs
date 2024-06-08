@@ -165,6 +165,8 @@ impl data_storages::DataStorage for PgSqlStorage {
 
     async fn write(
         &mut self,
+        data: Vec<data_storages::Row>,
+        schema: Option<data_storages::Schema>,
         options: &std::collections::HashMap<&str, &str>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         Err(ParameterError::new("notimpl").into())

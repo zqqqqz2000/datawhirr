@@ -1,6 +1,6 @@
 use std::fmt;
 
-use super::data_storages::{DataStorage, ReadResult, SchemaTypeWithValue};
+use super::data_storages::{DataStorage, ReadResult, Row, Schema, SchemaTypeWithValue};
 
 #[derive(Debug)]
 pub struct NoneStorage {}
@@ -32,6 +32,8 @@ impl DataStorage for NoneStorage {
 
     async fn write(
         &mut self,
+        _: Vec<Row>,
+        _: Option<Schema>,
         _: &std::collections::HashMap<&str, &str>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         Result::Err(NoneErr {}.into())

@@ -79,5 +79,10 @@ pub trait DataStorage {
         options: &HashMap<&str, &str>,
     ) -> Result<ReadResult, Box<dyn Error>>;
 
-    async fn write(&mut self, options: &HashMap<&str, &str>) -> Result<(), Box<dyn Error>>;
+    async fn write(
+        &mut self,
+        data: Vec<Row>,
+        schema: Option<Schema>,
+        options: &HashMap<&str, &str>,
+    ) -> Result<(), Box<dyn Error>>;
 }

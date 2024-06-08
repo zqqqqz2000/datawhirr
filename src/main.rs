@@ -1,9 +1,10 @@
 use core::panic;
 use std::{collections::HashMap, str::FromStr};
 mod config;
+mod data_storages;
+use data_storages::{data_storages::ReadResult, DataStorage};
 
 use clap::{command, Parser, Subcommand};
-mod data_storages;
 use config::Config;
 use regex::Regex;
 
@@ -33,6 +34,16 @@ struct TransOptions {
     /// schema for sink.
     #[arg(long)]
     sink_schema: Option<String>,
+    /// if use chunk r/w, chunk size
+    #[arg(long)]
+    chunk_size: Option<u32>,
+    /// thread number for chunk write, default 1
+    #[arg(long, default_value_t = 1)]
+    thread_num: u32,
+    /// read buffer size(row number), if reads too fast and buffer size is too large may cause oom, 0 means
+    /// unbounded, default 0
+    #[arg(long, default_value_t = 0)]
+    buffer_size: u32,
 }
 
 #[derive(Parser, Debug)]
@@ -103,7 +114,7 @@ async fn load_data_storage(
     }
 }
 
-fn exec_trans(args: TransOptions) {
+async fn exec_trans(args: TransOptions) {
     let config: Option<Config> = match args.config {
         Some(config_path) => {
             let f = std::fs::File::open(config_path).expect("cannot open file {config_path}");
@@ -113,14 +124,63 @@ fn exec_trans(args: TransOptions) {
     };
     let src_options = convert_option(args.source_option);
     let sink_options = convert_option(args.sink_option);
-    let source = load_data_storage(args.source.as_str(), &config, &src_options);
-    let sink = load_data_storage(args.sink.as_str(), &config, &sink_options);
+    let mut source = load_data_storage(args.source.as_str(), &config, &src_options).await;
+    let mut sink = load_data_storage(args.sink.as_str(), &config, &sink_options).await;
+
+    let src_str_options = &src_options
+        .iter()
+        .map(|(key, value)| (key.as_str(), value.as_str()))
+        .collect::<HashMap<_, _>>();
+    let sink_str_options = &sink_options
+        .iter()
+        .map(|(key, value)| (key.as_str(), value.as_str()))
+        .collect::<HashMap<_, _>>();
+    // try read schema first
+    let schema = match source.read_schema(src_str_options).await {
+        Ok(schema) => Some(schema),
+        Err(err) => {
+            println!("may not support get schema, reason: {err}");
+            None
+        }
+    };
+
+    match args.chunk_size {
+        // chunk trans
+        // TODO: chunk read and write with thread
+        Some(chunk_size) => {
+            let (s, r) = if args.buffer_size == 0 {
+                async_channel::unbounded::<ReadResult>()
+            } else {
+                async_channel::bounded::<ReadResult>(
+                    usize::try_from(args.buffer_size).expect("chunk size too large"),
+                )
+            };
+            source.chunk_read(None, chunk_size, src_str_options).await;
+        }
+        // read all then write
+        None => {
+            let source_read_res = source
+                .read(src_str_options)
+                .await
+                .expect("read from source error");
+            sink.write(
+                source_read_res.data,
+                Some(source_read_res.schema),
+                sink_str_options,
+            )
+            .await
+            .expect("write into sink error");
+        }
+    }
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let cli = Cli::parse();
     match cli.command {
-        Subcommands::Trans(args) => exec_trans(args),
+        Subcommands::Trans(args) => {
+            exec_trans(args).await;
+        }
         Subcommands::GenExample(args) => {
             let example = Config::example();
             let f = std::fs::OpenOptions::new()

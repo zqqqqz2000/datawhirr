@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::data_storages::{
-    data_storages::{self, Schema},
+    data_storages,
     pgsql::{error::ParseError, utils},
 };
 use sqlx::postgres::PgRow;
