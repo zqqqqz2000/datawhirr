@@ -1,8 +1,11 @@
 use core::panic;
-use std::{collections::HashMap, str::FromStr};
+use std::{collections::HashMap, str::FromStr, sync::Arc};
 mod config;
 mod data_storages;
-use data_storages::{data_storages::ReadResult, DataStorage};
+use data_storages::{
+    data_storages::{ReadResult, SchemaTypeWithValue},
+    DataStorage,
+};
 
 use clap::{command, Parser, Subcommand};
 use config::Config;
@@ -37,9 +40,6 @@ struct TransOptions {
     /// if use chunk r/w, chunk size
     #[arg(long)]
     chunk_size: Option<u32>,
-    /// thread number for chunk write, default 1
-    #[arg(long, default_value_t = 1)]
-    thread_num: u32,
     /// read buffer size(row number), if reads too fast and buffer size is too large may cause oom, 0 means
     /// unbounded, default 0
     #[arg(long, default_value_t = 0)]
@@ -114,7 +114,7 @@ async fn load_data_storage(
     }
 }
 
-async fn exec_trans(args: TransOptions) {
+async fn exec_trans<'a: 'b, 'b>(args: TransOptions) {
     let config: Option<Config> = match args.config {
         Some(config_path) => {
             let f = std::fs::File::open(config_path).expect("cannot open file {config_path}");
@@ -125,7 +125,6 @@ async fn exec_trans(args: TransOptions) {
     let src_options = convert_option(args.source_option);
     let sink_options = convert_option(args.sink_option);
     let mut source = load_data_storage(args.source.as_str(), &config, &src_options).await;
-    let mut sink = load_data_storage(args.sink.as_str(), &config, &sink_options).await;
 
     let src_str_options = &src_options
         .iter()
@@ -148,6 +147,7 @@ async fn exec_trans(args: TransOptions) {
         // chunk trans
         // TODO: chunk read and write with thread
         Some(chunk_size) => {
+            let arc_sync_opts = Arc::from(sink_options.clone());
             let (s, r) = if args.buffer_size == 0 {
                 async_channel::unbounded::<ReadResult>()
             } else {
@@ -155,7 +155,39 @@ async fn exec_trans(args: TransOptions) {
                     usize::try_from(args.buffer_size).expect("chunk size too large"),
                 )
             };
-            source.chunk_read(None, chunk_size, src_str_options).await;
+            let mut cursor: Option<SchemaTypeWithValue> = None;
+            let writer = tokio::spawn(async move {
+                let mut sink = load_data_storage(args.sink.as_str(), &config, &sink_options).await;
+                let sink_options_inner_async = &arc_sync_opts
+                    .iter()
+                    .map(|(key, value)| (key.as_str(), value.as_str()))
+                    .collect::<HashMap<_, _>>();
+                loop {
+                    if let Ok(res) = r.recv().await {
+                        sink.write(
+                            res.data,
+                            schema.clone().or(Some(res.schema)),
+                            sink_options_inner_async,
+                        )
+                        .await
+                        .expect("chunk sink error");
+                    } else {
+                        break;
+                    };
+                }
+            });
+            loop {
+                let res = source
+                    .chunk_read(cursor, chunk_size, src_str_options)
+                    .await
+                    .expect("read from source error");
+                cursor = res.cursor.clone();
+                if res.data.is_empty() {
+                    s.send(res).await;
+                    break;
+                }
+            }
+            writer.await.expect("write error");
         }
         // read all then write
         None => {
@@ -163,6 +195,7 @@ async fn exec_trans(args: TransOptions) {
                 .read(src_str_options)
                 .await
                 .expect("read from source error");
+            let mut sink = load_data_storage(args.sink.as_str(), &config, &sink_options).await;
             sink.write(
                 source_read_res.data,
                 Some(source_read_res.schema),
