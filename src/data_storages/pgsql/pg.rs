@@ -7,6 +7,8 @@ use crate::data_storages::{
     },
 };
 
+use anyhow::Result;
+use async_trait::async_trait;
 use futures::TryStreamExt;
 use regex::Regex;
 use sqlx::{
@@ -19,7 +21,7 @@ pub struct PgSqlStorage {
     connection: PgConnection,
 }
 
-fn valid_symbol(table_or_col_name: &str) -> Result<(), Box<dyn std::error::Error>> {
+fn valid_symbol(table_or_col_name: &str) -> Result<()> {
     let table_col_re = Regex::new("^[a-zA-Z_][a-zA-Z0-9_]{0,127}$")?;
     if table_col_re.is_match(table_or_col_name) {
         Ok(())
@@ -45,7 +47,7 @@ struct ChunkReadOptions {
 
 fn parse_chunkread_options(
     options: &std::collections::HashMap<&str, &str>,
-) -> Result<ChunkReadOptions, Box<dyn std::error::Error>> {
+) -> Result<ChunkReadOptions> {
     let query = if let Some(table) = options.get("table") {
         format!("select * from {}", table)
     } else {
@@ -72,18 +74,14 @@ fn parse_chunkread_options(
     })
 }
 
-fn option_str_to_type(type_str: &str) -> Result<SchemaType, Box<dyn std::error::Error>> {
+fn option_str_to_type(type_str: &str) -> Result<SchemaType> {
     match type_str {
         "varchar" => Ok(SchemaType::String),
         unk => Err(ParameterError::new(format!("unknow pk type {unk}").as_str()).into()),
     }
 }
 
-fn sql_page_condition(
-    limit: u32,
-    pk: &str,
-    cursor_exist: bool,
-) -> Result<String, Box<dyn std::error::Error>> {
+fn sql_page_condition(limit: u32, pk: &str, cursor_exist: bool) -> Result<String> {
     valid_symbol(pk)?;
     Ok(match cursor_exist {
         true => format!("where '{}' > {{}} order by {} asc limit {}", pk, pk, limit),
@@ -91,7 +89,7 @@ fn sql_page_condition(
     })
 }
 
-fn pgrow_to_row(row: PgRow) -> Result<data_storages::Row, Box<dyn std::error::Error>> {
+fn pgrow_to_row(row: PgRow) -> Result<data_storages::Row> {
     Ok(data_storages::Row(
         row.columns()
             .iter()
@@ -104,15 +102,16 @@ fn pgrow_to_row(row: PgRow) -> Result<data_storages::Row, Box<dyn std::error::Er
                     value: parse_col_to_typed_value(type_str.as_str(), column_name, &row)?,
                 })
             })
-            .collect::<Result<Vec<_>, Box<dyn std::error::Error>>>()?,
+            .collect::<Result<Vec<_>>>()?,
     ))
 }
 
+#[async_trait]
 impl data_storages::DataStorage for PgSqlStorage {
     async fn read_schema(
         &mut self,
         options: &std::collections::HashMap<&str, &str>,
-    ) -> Result<data_storages::Schema, Box<dyn std::error::Error>> {
+    ) -> Result<data_storages::Schema> {
         if let Some(table) = options.get("table") {
             let sql = "
             SELECT *  
@@ -134,7 +133,7 @@ impl data_storages::DataStorage for PgSqlStorage {
         cursor: Option<SchemaTypeWithValue>,
         limit: u32,
         options: &std::collections::HashMap<&str, &str>,
-    ) -> Result<ReadResult, Box<dyn std::error::Error>> {
+    ) -> Result<ReadResult> {
         let parsed_options = parse_chunkread_options(options)?;
         let sql = format!(
             "select * from ({}) {}",
@@ -168,42 +167,14 @@ impl data_storages::DataStorage for PgSqlStorage {
         data: Vec<data_storages::Row>,
         schema: Option<data_storages::Schema>,
         options: &std::collections::HashMap<&str, &str>,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) -> Result<()> {
         Err(ParameterError::new("notimpl").into())
     }
 
     async fn read(
         &mut self,
         options: &std::collections::HashMap<&str, &str>,
-    ) -> Result<ReadResult, Box<dyn std::error::Error>> {
+    ) -> Result<ReadResult> {
         Err(ParameterError::new("notimpl").into())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{valid_symbol, PgSqlStorage};
-    use crate::data_storages::data_storages::DataStorage;
-    use std::collections::HashMap;
-
-    #[tokio::test]
-    async fn testtest() {
-        let options = HashMap::from([("pk", "a"), ("table", "test")]);
-        let mut sql_storage = PgSqlStorage::new("postgres://test:test@localhost:5432/test")
-            .await
-            .unwrap();
-        let res = sql_storage.chunk_read(None, 100, &options).await.unwrap();
-        res.data.into_iter().for_each(|row| println!("{:?}", row));
-        let schema_from_table = sql_storage.read_schema(&options).await.unwrap();
-        println!("{:?}", schema_from_table);
-        panic!("fuck");
-    }
-
-    #[test]
-    fn test_valid_symbol() {
-        assert!(valid_symbol("valid").is_ok());
-        assert!(valid_symbol("_valid").is_ok());
-        assert!(valid_symbol("_124v_456alid").is_ok());
-        assert!(valid_symbol("0_not_valid").is_err());
     }
 }

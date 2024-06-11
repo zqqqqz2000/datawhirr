@@ -1,9 +1,7 @@
+use anyhow::{anyhow, Result};
 use std::collections::HashMap;
 
-use crate::data_storages::{
-    data_storages,
-    pgsql::{error::ParseError, utils},
-};
+use crate::data_storages::{data_storages, pgsql::utils};
 use sqlx::postgres::PgRow;
 use sqlx::{Column, Row};
 
@@ -11,7 +9,7 @@ pub fn parse_col_to_typed_value(
     type_name: &str,
     column_name: &str,
     row: &PgRow,
-) -> Result<data_storages::SchemaTypeWithValue, Box<dyn std::error::Error>> {
+) -> Result<data_storages::SchemaTypeWithValue> {
     match type_name {
         "VARCHAR" => Ok(data_storages::SchemaTypeWithValue::String(
             row.get(column_name),
@@ -19,30 +17,24 @@ pub fn parse_col_to_typed_value(
         "INT4" => Ok(data_storages::SchemaTypeWithValue::Int32(
             row.get(column_name),
         )),
-        unk => Err(ParseError::new(
-            format!("cannot parse type {unk} from pg row, may not supported yet.").as_str(),
-        )
-        .into()),
+        unk => Err(anyhow!("cannot parse type {unk}, may not supported yet.")),
     }
 }
 
-fn parse_pg_type(
-    type_name: &str,
-) -> Result<(data_storages::SchemaType, HashMap<String, String>), Box<dyn std::error::Error>> {
+fn parse_pg_type(type_name: &str) -> Result<(data_storages::SchemaType, HashMap<String, String>)> {
     match type_name {
         "VARCHAR" => Ok((data_storages::SchemaType::String, HashMap::new())),
         "INT4" => Ok((
             data_storages::SchemaType::Int32,
             HashMap::from([("length".to_string(), "4".to_string())]),
         )),
-        unk => Err(ParseError::new(
-            format!("unknown type {unk} from pg row, may not supported yet.").as_str(),
-        )
-        .into()),
+        unk => Err(anyhow!(
+            "unknown type {unk} from pg row, may not supported yet."
+        )),
     }
 }
 
-pub fn parse_row_schema(row: &PgRow) -> Result<data_storages::Schema, Box<dyn std::error::Error>> {
+pub fn parse_row_schema(row: &PgRow) -> Result<data_storages::Schema> {
     Ok(data_storages::Schema(
         row.columns()
             .iter()
@@ -57,7 +49,7 @@ pub fn parse_row_schema(row: &PgRow) -> Result<data_storages::Schema, Box<dyn st
                     extra,
                 })
             })
-            .collect::<Result<Vec<_>, Box<dyn std::error::Error>>>()?,
+            .collect::<Result<Vec<_>>>()?,
     ))
 }
 
@@ -80,7 +72,7 @@ impl From<PgRow> for ColumnSchemaInDB {
 }
 
 impl ColumnSchemaInDB {
-    pub fn to_data_schema(&self) -> Result<data_storages::SchemaField, Box<dyn std::error::Error>> {
+    pub fn to_data_schema(&self) -> Result<data_storages::SchemaField> {
         let mut extra: HashMap<String, String> =
             HashMap::from([("pg_type".to_string(), self.udt_name.clone())]);
         if let Some(nullable) = &self.is_nullable {
@@ -100,10 +92,7 @@ impl ColumnSchemaInDB {
                 type_: data_storages::SchemaType::Int32,
                 extra,
             }),
-            unk => Err(ParseError::new(
-                format!("cannot parse type {unk}, may not supported yet.").as_str(),
-            )
-            .into()),
+            unk => Err(anyhow!("cannot parse type {unk}, may not supported yet.")),
         }
     }
 }

@@ -1,3 +1,5 @@
+use anyhow::Result;
+use async_trait::async_trait;
 use std::fmt;
 
 use super::data_storages::{DataStorage, ReadResult, Row, Schema, SchemaTypeWithValue};
@@ -15,18 +17,16 @@ impl fmt::Display for NoneErr {
     }
 }
 
+#[async_trait]
 impl DataStorage for NoneStorage {
     async fn read_schema(
         &mut self,
         _: &std::collections::HashMap<&str, &str>,
-    ) -> Result<super::data_storages::Schema, Box<dyn std::error::Error>> {
+    ) -> Result<super::data_storages::Schema> {
         Err(NoneErr {}.into())
     }
 
-    async fn read(
-        &mut self,
-        _: &std::collections::HashMap<&str, &str>,
-    ) -> Result<ReadResult, Box<dyn std::error::Error>> {
+    async fn read(&mut self, _: &std::collections::HashMap<&str, &str>) -> Result<ReadResult> {
         Err(NoneErr {}.into())
     }
 
@@ -35,7 +35,7 @@ impl DataStorage for NoneStorage {
         _: Vec<Row>,
         _: Option<Schema>,
         _: &std::collections::HashMap<&str, &str>,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) -> Result<()> {
         Result::Err(NoneErr {}.into())
     }
 
@@ -44,7 +44,7 @@ impl DataStorage for NoneStorage {
         _: Option<SchemaTypeWithValue>,
         _: u32,
         _: &std::collections::HashMap<&str, &str>,
-    ) -> Result<ReadResult, Box<dyn std::error::Error>> {
+    ) -> Result<ReadResult> {
         Err(NoneErr {}.into())
     }
 }

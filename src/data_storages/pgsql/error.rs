@@ -18,22 +18,3 @@ impl ParameterError {
         }
     }
 }
-
-#[derive(Debug)]
-pub struct ParseError {
-    detail: String,
-}
-impl std::error::Error for ParseError {}
-
-impl fmt::Display for ParseError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "parameter error: {}", self.detail)
-    }
-}
-impl ParseError {
-    pub fn new(reason: &str) -> Self {
-        ParseError {
-            detail: reason.to_string(),
-        }
-    }
-}

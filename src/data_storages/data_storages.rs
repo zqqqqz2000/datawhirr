@@ -1,3 +1,5 @@
+use anyhow::Result;
+use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, error::Error};
@@ -64,25 +66,23 @@ pub struct ReadResult {
     pub cursor: Option<SchemaTypeWithValue>,
 }
 
+#[async_trait]
 pub trait DataStorage {
-    async fn read_schema(
-        &mut self,
-        options: &HashMap<&str, &str>,
-    ) -> Result<Schema, Box<dyn Error>>;
+    async fn read_schema(&mut self, options: &HashMap<&str, &str>) -> Result<Schema>;
 
-    async fn read(&mut self, options: &HashMap<&str, &str>) -> Result<ReadResult, Box<dyn Error>>;
+    async fn read(&mut self, options: &HashMap<&str, &str>) -> Result<ReadResult>;
 
     async fn chunk_read(
         &mut self,
         cursor: Option<SchemaTypeWithValue>,
         limit: u32,
         options: &HashMap<&str, &str>,
-    ) -> Result<ReadResult, Box<dyn Error>>;
+    ) -> Result<ReadResult>;
 
     async fn write(
         &mut self,
         data: Vec<Row>,
         schema: Option<Schema>,
         options: &HashMap<&str, &str>,
-    ) -> Result<(), Box<dyn Error>>;
+    ) -> Result<()>;
 }

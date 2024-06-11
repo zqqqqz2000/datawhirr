@@ -125,6 +125,7 @@ async fn exec_trans<'a: 'b, 'b>(args: TransOptions) {
     let src_options = convert_option(args.source_option);
     let sink_options = convert_option(args.sink_option);
     let mut source = load_data_storage(args.source.as_str(), &config, &src_options).await;
+    let mut sink = load_data_storage(args.sink.as_str(), &config, &sink_options).await;
 
     let src_str_options = &src_options
         .iter()
@@ -157,23 +158,18 @@ async fn exec_trans<'a: 'b, 'b>(args: TransOptions) {
             };
             let mut cursor: Option<SchemaTypeWithValue> = None;
             let writer = tokio::spawn(async move {
-                let mut sink = load_data_storage(args.sink.as_str(), &config, &sink_options).await;
                 let sink_options_inner_async = &arc_sync_opts
                     .iter()
                     .map(|(key, value)| (key.as_str(), value.as_str()))
                     .collect::<HashMap<_, _>>();
-                loop {
-                    if let Ok(res) = r.recv().await {
-                        sink.write(
-                            res.data,
-                            schema.clone().or(Some(res.schema)),
-                            sink_options_inner_async,
-                        )
-                        .await
-                        .expect("chunk sink error");
-                    } else {
-                        break;
-                    };
+                while let Ok(res) = r.recv().await {
+                    sink.write(
+                        res.data,
+                        schema.clone().or(Some(res.schema)),
+                        sink_options_inner_async,
+                    )
+                    .await
+                    .expect("chunk sink error");
                 }
             });
             loop {
@@ -183,7 +179,7 @@ async fn exec_trans<'a: 'b, 'b>(args: TransOptions) {
                     .expect("read from source error");
                 cursor = res.cursor.clone();
                 if res.data.is_empty() {
-                    s.send(res).await;
+                    s.send(res).await.expect("cannot put result into chan");
                     break;
                 }
             }
