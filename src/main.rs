@@ -1,17 +1,19 @@
 use core::panic;
-use std::{collections::HashMap, str::FromStr, sync::Arc};
+use std::{collections::HashMap, str::FromStr};
 mod config;
 mod data_storages;
 use data_storages::{
-    data_storages::{ReadResult, SchemaTypeWithValue},
+    data_storages::{ReadResult, Schema, SchemaTypeWithValue},
     DataStorage,
 };
 
 use clap::{command, Parser, Subcommand};
 use config::Config;
 use regex::Regex;
+mod utils;
+use utils::{new_chan, string_to_str_hashmap};
 
-#[derive(Parser, Debug)]
+#[derive(Parser, Debug, Clone)]
 #[command(version, about)]
 struct TransOptions {
     /// config path for source and sink.
@@ -44,6 +46,9 @@ struct TransOptions {
     /// unbounded, default 0
     #[arg(long, default_value_t = 0)]
     buffer_size: u32,
+    /// number of thread, effect if set chunk_size, default 1
+    #[arg(long, default_value_t = 1)]
+    thread_number: u32,
 }
 
 #[derive(Parser, Debug)]
@@ -114,6 +119,59 @@ async fn load_data_storage(
     }
 }
 
+async fn chunk_trans(
+    chunk_size: u32,
+    thread_num: u32,
+    sink_uri: String,
+    config: Option<Config>,
+    sink_options: &HashMap<String, String>,
+    src_options: &HashMap<String, String>,
+    schema: Option<Schema>,
+    mut source: impl DataStorage,
+) {
+    if thread_num == 0 {
+        panic!("thread number must genter than zero");
+    }
+    let (s, r) = new_chan::<ReadResult>(chunk_size);
+    let mut cursor: Option<SchemaTypeWithValue> = None;
+    let src_str_options = &string_to_str_hashmap(src_options);
+    let write_futures = (1..(thread_num + 1))
+        .map(|_| {
+            let r = r.clone();
+            let schema = schema.clone();
+            let config = config.clone();
+            let sink_options = sink_options.clone();
+            let sink_uri = sink_uri.clone();
+            tokio::spawn(async move {
+                let mut sink = load_data_storage(sink_uri.as_str(), &config, &sink_options).await;
+                while let Ok(res) = r.recv().await {
+                    sink.write(
+                        res.data,
+                        schema.clone().or(Some(res.schema)),
+                        &string_to_str_hashmap(&sink_options),
+                    )
+                    .await
+                    .expect("chunk sink error");
+                }
+            })
+        })
+        .collect::<Vec<_>>();
+    loop {
+        let res = source
+            .chunk_read(cursor, chunk_size, src_str_options)
+            .await
+            .expect("read from source error");
+        cursor = res.cursor.clone();
+        if res.data.is_empty() {
+            s.send(res).await.expect("cannot put result into chan");
+            break;
+        }
+    }
+    for write_future in write_futures {
+        write_future.await.expect("write error");
+    }
+}
+
 async fn exec_trans<'a: 'b, 'b>(args: TransOptions) {
     let config: Option<Config> = match args.config {
         Some(config_path) => {
@@ -125,16 +183,8 @@ async fn exec_trans<'a: 'b, 'b>(args: TransOptions) {
     let src_options = convert_option(args.source_option);
     let sink_options = convert_option(args.sink_option);
     let mut source = load_data_storage(args.source.as_str(), &config, &src_options).await;
-    let mut sink = load_data_storage(args.sink.as_str(), &config, &sink_options).await;
 
-    let src_str_options = &src_options
-        .iter()
-        .map(|(key, value)| (key.as_str(), value.as_str()))
-        .collect::<HashMap<_, _>>();
-    let sink_str_options = &sink_options
-        .iter()
-        .map(|(key, value)| (key.as_str(), value.as_str()))
-        .collect::<HashMap<_, _>>();
+    let src_str_options = &string_to_str_hashmap(&src_options);
     // try read schema first
     let schema = match source.read_schema(src_str_options).await {
         Ok(schema) => Some(schema),
@@ -146,47 +196,22 @@ async fn exec_trans<'a: 'b, 'b>(args: TransOptions) {
 
     match args.chunk_size {
         // chunk trans
-        // TODO: chunk read and write with thread
         Some(chunk_size) => {
-            let arc_sync_opts = Arc::from(sink_options.clone());
-            let (s, r) = if args.buffer_size == 0 {
-                async_channel::unbounded::<ReadResult>()
-            } else {
-                async_channel::bounded::<ReadResult>(
-                    usize::try_from(args.buffer_size).expect("chunk size too large"),
-                )
-            };
-            let mut cursor: Option<SchemaTypeWithValue> = None;
-            let writer = tokio::spawn(async move {
-                let sink_options_inner_async = &arc_sync_opts
-                    .iter()
-                    .map(|(key, value)| (key.as_str(), value.as_str()))
-                    .collect::<HashMap<_, _>>();
-                while let Ok(res) = r.recv().await {
-                    sink.write(
-                        res.data,
-                        schema.clone().or(Some(res.schema)),
-                        sink_options_inner_async,
-                    )
-                    .await
-                    .expect("chunk sink error");
-                }
-            });
-            loop {
-                let res = source
-                    .chunk_read(cursor, chunk_size, src_str_options)
-                    .await
-                    .expect("read from source error");
-                cursor = res.cursor.clone();
-                if res.data.is_empty() {
-                    s.send(res).await.expect("cannot put result into chan");
-                    break;
-                }
-            }
-            writer.await.expect("write error");
+            chunk_trans(
+                chunk_size,
+                args.thread_number,
+                args.sink.clone(),
+                config.clone(),
+                &sink_options,
+                &src_options,
+                schema,
+                source,
+            )
+            .await;
         }
         // read all then write
         None => {
+            let sink_str_options = &string_to_str_hashmap(&sink_options);
             let source_read_res = source
                 .read(src_str_options)
                 .await

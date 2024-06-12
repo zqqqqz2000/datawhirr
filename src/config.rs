@@ -2,13 +2,13 @@ use crate::data_storages::data_storages::{Schema, SchemaField, SchemaType};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct DataStorageConfig {
     pub uri: String,
     pub options: HashMap<String, String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Config {
     pub data_storages: HashMap<String, DataStorageConfig>,
     pub schemas: HashMap<String, Schema>,
