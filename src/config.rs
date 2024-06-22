@@ -20,7 +20,7 @@ impl Config {
             data_storages: HashMap::from([(
                 "example_storage1".to_string(),
                 DataStorageConfig {
-                    uri: "mysql://xxxx:xxxx@xxxx/xxxx".to_string(),
+                    uri: "mysql://test:test@localhost/test".to_string(),
                     options: HashMap::new(),
                 },
             )]),
