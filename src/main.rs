@@ -96,7 +96,7 @@ async fn load_data_storage(
     uri_or_name: &str,
     config: &Option<Config>,
     config_from_args: &HashMap<String, String>,
-) -> impl data_storages::DataStorage {
+) -> Box<dyn data_storages::DataStorage + Send> {
     let r = Regex::new(r"[a-zA-Z0-9]+://.*").unwrap();
     if r.is_match(uri_or_name) {
         data_storages::loader::load_data_storage(uri_or_name, config_from_args).await
@@ -127,7 +127,7 @@ async fn chunk_trans(
     sink_options: &HashMap<String, String>,
     src_options: &HashMap<String, String>,
     schema: Option<Schema>,
-    mut source: impl DataStorage,
+    mut source: Box<dyn DataStorage + Send>,
 ) {
     if thread_num == 0 {
         panic!("thread number must genter than zero");
